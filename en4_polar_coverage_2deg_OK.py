@@ -1,7 +1,6 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 """
+Commande d'exécution :
+    python3 ~/Thesis/EN4/Codes/en4_polar_coverage_2deg_OK.py
 EN4 → Cartes polaires Antarctique (2°×2°)
 - 7 panneaux (1900–1909 … 1960–1969)
 - TOTAL et MOYENNE/AN stricte (= somme annuelle / 10)
@@ -23,9 +22,8 @@ from collections import defaultdict
 from pathlib import Path
 
 # ---------- Configuration globale des fontes ----------
-# (tu peux jouer sur FONT_BASE pour tout augmenter/diminuer)
 FONT_BASE          = 11  # base générale
-FONT_PANEL_TITLE   = 13  # "1900-1909" au-dessus de chaque carte
+FONT_PANEL_TITLE   = 13  # décennie au-dessus de chaque carte
 FONT_SUPTITLE      = 14  # titre global de la figure
 FONT_CBAR_LABEL    = 13  # label de la barre de couleur
 FONT_CBAR_TICKS    = 13  # valeurs sur la barre de couleur
@@ -120,9 +118,9 @@ def circle_boundary_path():
 def setup_ax(ax):
     ax.set_extent([-180, 180, -90, LAT_CUTOFF], ccrs.PlateCarree())
     ax.set_boundary(circle_boundary_path(), transform=ax.transAxes)
-    ax.set_facecolor("#E0E0E0")  # MODIFIÉ : gris clair au lieu de blanc
-    ax.add_feature(cfeature.LAND, facecolor="antiquewhite", edgecolor="none", zorder=3)  # MODIFIÉ : antiquewhite
-    ax.add_feature(cfeature.COASTLINE.with_scale("50m"), linewidth=0.5, color="black", zorder=4)  # MODIFIÉ : 50m au lieu de 110m
+    ax.set_facecolor("#E0E0E0")  # gris clair 
+    ax.add_feature(cfeature.LAND, facecolor="antiquewhite", edgecolor="none", zorder=3)  # antiquewhite
+    ax.add_feature(cfeature.COASTLINE.with_scale("50m"), linewidth=0.5, color="black", zorder=4)  #  50m 
     ylocs = np.arange(-90, int(LAT_CUTOFF)-9, 10)
     try:
         ax.gridlines(crs=ccrs.PlateCarree(), draw_labels=False,
@@ -133,7 +131,7 @@ def setup_ax(ax):
                      xlocs=np.arange(-180,181,30), ylocs=ylocs,
                      linestyle="--", linewidth=0.6, color="0.5")
 
-    # Si un jour tu réactives des ticks axe, ça uniformisera la taille :
+
     ax.tick_params(labelsize=FONT_AX_TICKS)
 
 def plot_panels(OUT_PATH, panels_arrays, title, cbar_label, lat_centers, lon_centers, scale_type="total"):

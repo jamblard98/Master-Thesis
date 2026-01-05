@@ -1,7 +1,6 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 """
+Commande d'execution : python3 ~/Thesis/WOD/Codes/wod_polar_coverage_2deg_OK.py
+
 WOD → Cartes polaires Antarctique (2°×2°)
 - 7 panneaux (1900–1909 … 1960–1969)
 - TOTAL et MOYENNE/AN stricte (= somme annuelle / 10)
@@ -22,15 +21,15 @@ import xarray as xr
 from netCDF4 import num2date
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
-from matplotlib.path import Path as MplPath          # éviter conflit avec pathlib.Path
+from matplotlib.path import Path as MplPat
 from matplotlib.colors import LinearSegmentedColormap
 from collections import defaultdict
 from pathlib import Path
 
 # ---------- Configuration globale des fontes ----------
 FONT_BASE          = 11  # base générale
-FONT_PANEL_TITLE   = 13  # "1900-1909" au-dessus de chaque carte
-FONT_SUPTITLE      = 14  # titre global de la figure (quand présent)
+FONT_PANEL_TITLE   = 13  # décennie au-dessus de chaque carte
+FONT_SUPTITLE      = 14  # titre global de la figure 
 FONT_CBAR_LABEL    = 13  # label de la barre de couleur
 FONT_CBAR_TICKS    = 13  # valeurs sur la barre de couleur
 FONT_AX_TICKS      = 10  # taille potentielle des labels d'axes
@@ -54,7 +53,7 @@ OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 RECURSIVE  = bool(int(os.environ.get("WOD_RECURSIVE", "0")))
 LAT_CUTOFF = -60
-ENGINE     = os.environ.get("WOD_ENGINE", "scipy")     # 'scipy' conseillé pour NetCDF classic
+ENGINE     = os.environ.get("WOD_ENGINE", "scipy")     
 
 # ---------- Échelles de légende ----------
 def get_breaks_and_label(scale_type):
@@ -152,7 +151,7 @@ def setup_ax(ax):
         ax.gridlines(crs=ccrs.PlateCarree(), draw_labels=False,
                      xlocs=np.arange(-180,181,30), ylocs=ylocs,
                      linestyle="--", linewidth=0.6, color="0.5")
-    # Si un jour tu remets des ticks visibles, ça uniformise la taille
+    
     ax.tick_params(labelsize=FONT_AX_TICKS)
 
 def plot_panels(OUT_PATH, panels_arrays, title, cbar_label, lat_centers, lon_centers, scale_type="total"):
@@ -186,7 +185,7 @@ def plot_panels(OUT_PATH, panels_arrays, title, cbar_label, lat_centers, lon_cen
         # Titre de chaque sous-figure = décennie
         ax.set_title(f"{y0}-{y1}", fontsize=FONT_PANEL_TITLE, pad=6)
 
-    # Titre global : seulement si on fournit un title non None
+    # Titre global : seulement si title non None
     if title is not None:
         fig.suptitle(title, fontsize=FONT_SUPTITLE, y=0.98)
 
