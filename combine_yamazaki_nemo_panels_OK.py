@@ -1,9 +1,17 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-combine_yamazaki_nemo_panels_CLEAN.py (LON 0-360°)
 
-Panneau 4×2 optimisé : Yamazaki (gauche) vs NEMO (droite)
+"""
+Script d'éxécution : 
+python3  ~/Thesis/Codes/combine_yamazaki_nemo_panels_OK.py \
+  --yamazaki-csv-dir ~/Thesis/Yamazaki/Datas/Datas_OK \
+  --nemo-csv-dir ~/Thesis/NEMO/Datas/Datas_OK \
+  --out-dir ~/Thesis/Outputs \
+  --season DJF \
+  --depth-min 10 \
+  --depth-max 200 \
+  --hist-y0 1900 \
+  --hist-y1 1970
+
+Panneaux : Yamazaki (gauche) vs NEMO (droite)
 Profils d'anomalie par mer.
 
 LOGIQUE LONGITUDE 0-360° (sens horaire) :
@@ -44,7 +52,7 @@ SEASON_MONTHS = {
 }
 
 # =============================================================================
-# AJOUT : BANDES DE LATITUDE (pour profils latitudinaux) — cohérent avec la figure jointe
+# AJOUT : BANDES DE LATITUDE (pour profils latitudinaux)
 # =============================================================================
 
 LAT_BANDS = [
@@ -100,8 +108,8 @@ DECADE_COLORS = ['#1f77b4', '#ff7f0e', '#2ca02c',
 def _safe_read_csvs(pattern: str) -> pd.DataFrame:
     files = sorted(glob.glob(pattern))
 
-    print(f"🔍 Pattern: {pattern}")
-    print(f"🔍 Fichiers trouvés: {len(files)}")
+    print(f" Pattern: {pattern}")
+    print(f" Fichiers trouvés: {len(files)}")
 
     dfs = []
     total_lines = 0
@@ -113,12 +121,12 @@ def _safe_read_csvs(pattern: str) -> pd.DataFrame:
                 continue
             dfs.append(df)
             fname = Path(f).name
-            print(f"   ✓ {fname}: {len(df):,} lignes")
+            print(f"    {fname}: {len(df):,} lignes")
             total_lines += len(df)
         except Exception as e:
-            print(f"⚠️  Lecture échouée: {f} ({e})")
+            print(f"  Lecture échouée: {f} ({e})")
 
-    print(f"📊 TOTAL chargé: {total_lines:,} lignes depuis {len(dfs)} fichiers")
+    print(f"TOTAL chargé: {total_lines:,} lignes depuis {len(dfs)} fichiers")
 
     return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
 
@@ -154,322 +162,19 @@ def filter_by_sea(df, sea_config):
     lon_end = sea_config['lon_end']
 
     if lon_start <= lon_end:
-        # Arc normal (ex: Davis 80→100)
+        # Arc normal
         df_sea = df_sea[
             (df_sea['lon_360'] >= lon_start) &
             (df_sea['lon_360'] < lon_end)
         ]
     else:
-        # Passage par 0° (ne devrait pas arriver avec notre config)
+        # Passage par 0°
         df_sea = df_sea[
             (df_sea['lon_360'] >= lon_start) |
             (df_sea['lon_360'] < lon_end)
         ]
 
     return df_sea
-
-
-# =============================================================================
-# AJOUTS : STATISTIQUES "FORENSICS" POUR EXPLIQUER LES POINTS ATYPIQUES (FIG. 7)
-# =============================================================================
-
-def _depth_bin_label(z, bin_size=10, zmin=10, zmax=200):
-    """Retourne un label de bin (ex: '140-150') pour une profondeur z."""
-    if not np.isfinite(z):
-        return None
-    b0 = int(np.floor((z - zmin) / bin_size) * bin_size + zmin)
-    b1 = b0 + bin_size
-    if b0 < zmin or b1 > (zmax + 1e-9):
-        return None
-    return f"{b0}-{b1}"
-
-
-def _make_cell_id(df, lat_col='hist_lat', lon_col='hist_lon', res_deg=2):
-    """
-    Crée une 'cellule' approx 2°×2° (par défaut) pour diagnostiquer
-    la domination spatiale (un seul endroit qui tire tout).
-
-    NOTE: ajoute aussi explicitement 'lon_360' pour éviter tout KeyError
-    après des groupby (où lon_360 peut disparaître).
-    """
-    d = df.copy()
-    d['cell_lat'] = (np.floor(d[lat_col] / res_deg) * res_deg).astype(int)
-
-    lon360 = normalize_longitude_360(d[lon_col].to_numpy())
-    d['lon_360'] = lon360  # <-- FIX: garantir la présence de lon_360
-    d['cell_lon'] = (np.floor(lon360 / res_deg) * res_deg).astype(int)
-
-    d['cell_id'] = d['cell_lat'].astype(str) + "_" + d['cell_lon'].astype(str)
-    return d
-
-
-def _robust_stats(x):
-    """Stats robustes + classiques, x array-like."""
-    x = np.asarray(x)
-    x = x[np.isfinite(x)]
-    if x.size == 0:
-        return dict(N=0, mean=np.nan, std=np.nan, sem=np.nan,
-                    median=np.nan, p10=np.nan, p90=np.nan, iqr=np.nan)
-    mean = float(np.mean(x))
-    std = float(np.std(x, ddof=1)) if x.size >= 2 else np.nan
-    sem = float(std / np.sqrt(x.size)) if np.isfinite(std) else np.nan
-    q10, q25, q50, q75, q90 = np.percentile(x, [10, 25, 50, 75, 90])
-    return dict(
-        N=int(x.size),
-        mean=mean,
-        std=std,
-        sem=sem,
-        median=float(q50),
-        p10=float(q10),
-        p90=float(q90),
-        iqr=float(q75 - q25)
-    )
-
-
-def _bootstrap_ci_mean(x, n_boot=500, ci=95, seed=0):
-    """IC bootstrap sur la moyenne. Renvoie (low, high)."""
-    x = np.asarray(x)
-    x = x[np.isfinite(x)]
-    if x.size < 3:
-        return (np.nan, np.nan)
-    rng = np.random.default_rng(seed)
-    boots = rng.choice(x, size=(n_boot, x.size), replace=True).mean(axis=1)
-    alpha = (100 - ci) / 2
-    lo, hi = np.percentile(boots, [alpha, 100 - alpha])
-    return (float(lo), float(hi))
-
-
-def _compute_profile_forensics_tables(
-    sea_name, df_sea_yam, df_sea_nem, out_dir: Path,
-    depth_min=10, depth_max=200, bin_size=10,
-    cell_res_deg=2, do_bootstrap=True,
-    silent=False
-):
-    """
-    Produit des tables CSV + prints terminal pour diagnostiquer :
-    - si certains "points" d'un profil sont dominés par 1-2 obs / 1 année / 1 cellule
-    - la distribution (moyenne, médiane, p10/p90, iqr, etc.) par bin de profondeur
-    - le biais NEMO - OBS par bin (moyenne & médiane)
-    - les outliers (top 10 chaud/froid) avec date + lat/lon + profondeur + cellule
-    """
-    # --------------------
-    # Préparer OBS (observations - Yamazaki)
-    # --------------------
-    obs = df_sea_yam.copy()
-    obs = obs[(obs['hist_depth_m'] >= depth_min) & (obs['hist_depth_m'] <= depth_max)]
-    if obs.empty:
-        if not silent:
-            print(f"   ⚠️  Forensics: pas de données OBS pour {sea_name}")
-        return
-
-    obs['delta_T'] = obs['hist_temperature'] - obs['yamazaki_T']
-    obs['depth_bin'] = obs['hist_depth_m'].apply(lambda z: _depth_bin_label(z, bin_size, depth_min, depth_max))
-    obs = obs.dropna(subset=['depth_bin'])
-    obs = _make_cell_id(obs, 'hist_lat', 'hist_lon', res_deg=cell_res_deg)
-
-    # --------------------
-    # Préparer NEMO (hist - recent_mean)
-    # --------------------
-    mod = df_sea_nem.copy()
-    mod = mod[(mod['hist_depth_m'] >= depth_min) & (mod['hist_depth_m'] <= depth_max)]
-    if mod.empty:
-        if not silent:
-            print(f"   ⚠️  Forensics: pas de données NEMO pour {sea_name}")
-        return
-
-    group_cols = ['hist_year', 'hist_month', 'hist_day',
-                  'hist_lat', 'hist_lon', 'hist_depth_m', 'nemo_hist_T']
-    modg = mod.groupby(group_cols, as_index=False).agg({'nemo_recent_T': 'mean'})
-    modg.rename(columns={'nemo_recent_T': 'nemo_recent_mean'}, inplace=True)
-    modg['delta_T'] = modg['nemo_hist_T'] - modg['nemo_recent_mean']
-
-    modg['depth_bin'] = modg['hist_depth_m'].apply(lambda z: _depth_bin_label(z, bin_size, depth_min, depth_max))
-    modg = modg.dropna(subset=['depth_bin'])
-    modg = _make_cell_id(modg, 'hist_lat', 'hist_lon', res_deg=cell_res_deg)
-
-    # --------------------
-    # Agrégation par décennie & bin
-    # --------------------
-    rows_obs = []
-    rows_mod = []
-    rows_outliers = []
-
-    def _collect_outliers(df, dataset_tag, dec_label):
-        if df.empty:
-            return
-        cols = ['hist_year', 'hist_month', 'hist_day',
-                'hist_lat', 'hist_lon', 'lon_360',
-                'hist_depth_m', 'depth_bin', 'cell_id', 'delta_T']
-        if 'lon_360' not in df.columns:
-            df = df.copy()
-            df['lon_360'] = normalize_longitude_360(df['hist_lon'])
-        d = df[cols].copy()
-        d = d[np.isfinite(d['delta_T'])]
-        if d.empty:
-            return
-        top_hot = d.nlargest(10, 'delta_T')
-        top_cold = d.nsmallest(10, 'delta_T')
-        for kind, dd in [('hot', top_hot), ('cold', top_cold)]:
-            for _, r in dd.iterrows():
-                rows_outliers.append({
-                    'Sea': sea_name,
-                    'Dataset': dataset_tag,
-                    'Decade': dec_label,
-                    'Kind': kind,
-                    'year': int(r['hist_year']),
-                    'month': int(r['hist_month']),
-                    'day': int(r['hist_day']),
-                    'lat': float(r['hist_lat']),
-                    'lon': float(r['hist_lon']),
-                    'lon_360': float(r['lon_360']) if np.isfinite(r['lon_360']) else np.nan,
-                    'depth_m': float(r['hist_depth_m']),
-                    'depth_bin': r['depth_bin'],
-                    'cell_id': r['cell_id'],
-                    'delta_T': float(r['delta_T'])
-                })
-
-    def _summarize_bins(df, dataset_tag, dec_label, rows):
-        if df.empty:
-            return
-        for depth_bin, sub in df.groupby('depth_bin'):
-            x = sub['delta_T'].to_numpy()
-            st = _robust_stats(x)
-
-            ci_lo, ci_hi = (np.nan, np.nan)
-            if do_bootstrap and st['N'] >= 10:
-                ci_lo, ci_hi = _bootstrap_ci_mean(x, n_boot=500, ci=95, seed=0)
-
-            n_years = int(sub['hist_year'].nunique())
-            year_counts = sub['hist_year'].value_counts()
-            top_year_frac = float(year_counts.iloc[0] / st['N']) if st['N'] > 0 else np.nan
-
-            n_cells = int(sub['cell_id'].nunique())
-            cell_counts = sub['cell_id'].value_counts()
-            top_cell_frac = float(cell_counts.iloc[0] / st['N']) if st['N'] > 0 else np.nan
-
-            rows.append({
-                'Sea': sea_name,
-                'Dataset': dataset_tag,
-                'Decade': dec_label,
-                'depth_bin': depth_bin,
-                **st,
-                'ci95_lo': ci_lo,
-                'ci95_hi': ci_hi,
-                'n_unique_years': n_years,
-                'top_year_frac': top_year_frac,
-                'n_unique_cells': n_cells,
-                'top_cell_frac': top_cell_frac,
-            })
-
-    for (dec0, dec1) in DECADES:
-        dec_label = f"{dec0}-{dec1-1}"
-        obs_dec = obs[(obs['hist_year'] >= dec0) & (obs['hist_year'] < dec1)]
-        mod_dec = modg[(modg['hist_year'] >= dec0) & (modg['hist_year'] < dec1)]
-
-        _collect_outliers(obs_dec, "OBS", dec_label)
-        _collect_outliers(mod_dec, "NEMO", dec_label)
-
-        _summarize_bins(obs_dec, "OBS", dec_label, rows_obs)
-        _summarize_bins(mod_dec, "NEMO", dec_label, rows_mod)
-
-    df_obs_stats = pd.DataFrame(rows_obs).sort_values(['Sea', 'Decade', 'depth_bin'])
-    df_mod_stats = pd.DataFrame(rows_mod).sort_values(['Sea', 'Decade', 'depth_bin'])
-    df_out = pd.DataFrame(rows_outliers)
-
-    # --------------------
-    # Biais NEMO - OBS par bin (jointure)
-    # --------------------
-    if not df_obs_stats.empty and not df_mod_stats.empty:
-        j = df_obs_stats.merge(
-            df_mod_stats,
-            on=['Sea', 'Decade', 'depth_bin'],
-            suffixes=('_obs', '_mod'),
-            how='inner'
-        )
-        j['bias_mean_mod_minus_obs'] = j['mean_mod'] - j['mean_obs']
-        j['bias_median_mod_minus_obs'] = j['median_mod'] - j['median_obs']
-    else:
-        j = pd.DataFrame()
-
-    # --------------------
-    # Sauvegarde CSV
-    # --------------------
-    sea_tag = SEAS[sea_name]['label'].replace('\n', '').replace('/', '-').replace(' ', '')
-    out_obs = out_dir / f"forensics_obs_{sea_tag}.csv"
-    out_mod = out_dir / f"forensics_nemo_{sea_tag}.csv"
-    out_bias = out_dir / f"forensics_bias_nemo_minus_obs_{sea_tag}.csv"
-    out_ol  = out_dir / f"forensics_outliers_{sea_tag}.csv"
-
-    df_obs_stats.to_csv(out_obs, index=False)
-    df_mod_stats.to_csv(out_mod, index=False)
-    if not j.empty:
-        j.to_csv(out_bias, index=False)
-    if not df_out.empty:
-        df_out.to_csv(out_ol, index=False)
-
-    if silent:
-        return
-
-    # --------------------
-    # PRINTS TERMINAL (lisible)
-    # --------------------
-    print("\n" + "="*92)
-    print(f"📌 FORENSICS FIG.7 — {sea_name}  |  cell_res={cell_res_deg}°  |  bins={bin_size}m  |  depth={depth_min}-{depth_max}m")
-    print("="*92)
-
-    def _print_summary(df_stats, title):
-        if df_stats.empty:
-            print(f"⚠️  {title}: aucun résultat.")
-            return
-        cols = ['Decade', 'depth_bin', 'N', 'mean', 'median', 'p10', 'p90', 'std', 'sem',
-                'ci95_lo', 'ci95_hi', 'n_unique_years', 'top_year_frac', 'n_unique_cells', 'top_cell_frac']
-        d = df_stats.copy()
-        for c in ['mean', 'median', 'p10', 'p90', 'std', 'sem', 'ci95_lo', 'ci95_hi', 'top_year_frac', 'top_cell_frac']:
-            if c in d.columns:
-                d[c] = pd.to_numeric(d[c], errors='coerce')
-        for dec in d['Decade'].unique():
-            dd = d[d['Decade'] == dec][cols].copy()
-            dd = dd.sort_values('depth_bin')
-            print(f"\n--- {title} | {dec} ---")
-            with pd.option_context('display.max_rows', 500, 'display.width', 220):
-                print(dd.to_string(index=False, float_format=lambda x: f"{x:,.3f}"))
-
-    _print_summary(df_obs_stats[df_obs_stats['Dataset'] == 'OBS'], "OBS (obs - Yamazaki)")
-    _print_summary(df_mod_stats[df_mod_stats['Dataset'] == 'NEMO'], "NEMO (hist - recent_mean)")
-
-    if not j.empty:
-        print("\n" + "-"*92)
-        print("BIAIS NEMO - OBS (par bin de profondeur) :")
-        print("-"*92)
-        cols_b = ['Decade', 'depth_bin', 'N_obs', 'N_mod', 'mean_obs', 'mean_mod',
-                  'bias_mean_mod_minus_obs', 'median_obs', 'median_mod', 'bias_median_mod_minus_obs']
-        jb = j[cols_b].copy().sort_values(['Decade', 'depth_bin'])
-        with pd.option_context('display.max_rows', 500, 'display.width', 220):
-            print(jb.to_string(index=False, float_format=lambda x: f"{x:,.3f}"))
-
-    if not df_out.empty:
-        print("\n" + "-"*92)
-        print("OUTLIERS (top10 chaud/froid) — utile pour repérer '1 année' ou '1 cellule' :")
-        print("-"*92)
-        for dec in df_out['Decade'].unique():
-            ddec = df_out[df_out['Decade'] == dec]
-            hot = ddec[ddec['Kind'] == 'hot'].sort_values('delta_T', ascending=False).head(5)
-            cold = ddec[ddec['Kind'] == 'cold'].sort_values('delta_T', ascending=True).head(5)
-            print(f"\n--- Outliers {sea_name} | {dec} | HOT (top 5) ---")
-            with pd.option_context('display.width', 220):
-                print(hot[['Dataset','year','month','day','lat','lon_360','depth_m','depth_bin','cell_id','delta_T']].to_string(index=False, float_format=lambda x: f"{x:,.3f}"))
-            print(f"\n--- Outliers {sea_name} | {dec} | COLD (top 5) ---")
-            with pd.option_context('display.width', 220):
-                print(cold[['Dataset','year','month','day','lat','lon_360','depth_m','depth_bin','cell_id','delta_T']].to_string(index=False, float_format=lambda x: f"{x:,.3f}"))
-
-    print("\n✅ CSV générés :")
-    print(f"   - {out_obs.name}")
-    print(f"   - {out_mod.name}")
-    if not j.empty:
-        print(f"   - {out_bias.name}")
-    if not df_out.empty:
-        print(f"   - {out_ol.name}")
-    print("="*92 + "\n")
 
 
 # =============================================================================
@@ -788,7 +493,7 @@ def _save_vertical_stats_table(stats_rows, out_dir: Path, silent=False):
     """Sauvegarde le tableau de stats verticales en CSV + print terminal."""
     if not stats_rows:
         if not silent:
-            print("\n⚠️  Aucune statistique verticale à sauvegarder.")
+            print("\n  Aucune statistique verticale à sauvegarder.")
         return
 
     df_stats = pd.DataFrame(stats_rows)
@@ -810,12 +515,12 @@ def _save_vertical_stats_table(stats_rows, out_dir: Path, silent=False):
 
     if not silent:
         print("\n" + "="*72)
-        print("📊 TABLEAU DE COMPARAISON NEMO vs YAMAZAKI (statistiques verticales)")
+        print("TABLEAU DE COMPARAISON NEMO vs YAMAZAKI (statistiques verticales)")
         print("="*72)
         pd.options.display.float_format = "{:,.3f}".format
         print(df_stats.to_string(index=False))
         print("="*72 + "\n")
-        print(f"✅ Tableau comparatif sauvegardé : {out_csv.name}")
+        print(f"Tableau comparatif sauvegardé : {out_csv.name}")
 
 
 # =============================================================================
@@ -823,7 +528,7 @@ def _save_vertical_stats_table(stats_rows, out_dir: Path, silent=False):
 # =============================================================================
 
 def _fmt_depth_label(d0, d1):
-    # Conserver exactement tes labels + ajout shallow (10–50, 50–100)
+    # Conserver exactement les labels + ajout shallow (10–50, 50–100)
     if abs(d0 - 10) < 1e-9 and abs(d1 - 50) < 1e-9:
         return "10–50 m"
     if abs(d0 - 50) < 1e-9 and abs(d1 - 100) < 1e-9:
@@ -992,7 +697,7 @@ def _build_table_latband_decade(dataset_name: str, df_points: pd.DataFrame) -> p
 
 
 # =============================================================================
-# AJOUT : NOUVEAU TABLEAU "LAT×PERIODE×PROFONDEUR" (ce que tu demandes)
+# AJOUT : TABLEAU "LAT×PERIODE×PROFONDEUR"
 # =============================================================================
 
 def _build_table_latband_period_depth(dataset_name: str, df_points: pd.DataFrame) -> pd.DataFrame:
@@ -1564,7 +1269,7 @@ def _save_table_latband_decade_png(df_latdec: pd.DataFrame, out_png: Path, font_
 
 
 # =============================================================================
-# AJOUT : PNG LAT×PERIODE×PROFONDEUR (nouveau tableau)
+# AJOUT : PNG LAT×PERIODE×PROFONDEUR
 # =============================================================================
 
 def _save_table_latband_period_depth_png(df_latpd: pd.DataFrame, out_png: Path, font_size=10, decimals=2):
@@ -1766,8 +1471,8 @@ def _generate_stats_outputs(df_yam_filtered: pd.DataFrame,
     - AJOUT: Scatter SO "shallow bands" 10–50 & 50–100 (2 lignes par période)
     - AJOUT: LAT×DECADE (par bande de latitude, par décennie) — OBS/NEMO + _brute
       + PNG pour la version agrégée uniquement
-    - AJOUT: LAT×PERIODE×PROFONDEUR (par bande de latitude) — OBS/NEMO + _brute   <-- NOUVEAU
-      + PNG pour la version agrégée uniquement                                   <-- NOUVEAU
+    - AJOUT: LAT×PERIODE×PROFONDEUR (par bande de latitude) — OBS/NEMO + _brute   
+      + PNG pour la version agrégée uniquement                                   
     - AJOUT: 3 "Case tables" (BA, Weddell, Ross) + z-score pooled (résout Ross vide)
     - Format PNG : 2 décimales fixes pour toutes les valeurs numériques.
     """
@@ -1793,7 +1498,7 @@ def _generate_stats_outputs(df_yam_filtered: pd.DataFrame,
     latdec_nem = _build_table_latband_decade("NEMO", nemo_pts)
 
     # =============================================================================
-    # NOUVEAU : LAT×PERIODE×PROFONDEUR (OBS/NEMO)
+    # LAT×PERIODE×PROFONDEUR (OBS/NEMO)
     # =============================================================================
     latpd_obs = _build_table_latband_period_depth("OBS", obs_pts)
     latpd_nem = _build_table_latband_period_depth("NEMO", nemo_pts)
@@ -1838,7 +1543,7 @@ def _generate_stats_outputs(df_yam_filtered: pd.DataFrame,
     _write_df_to_sheet(wb, "LatDec_NEMO_brute", latdec_nem)
 
     # =============================================================================
-    # NOUVEAU : LAT×PERIODE×PROFONDEUR — 4 feuilles
+    # LAT×PERIODE×PROFONDEUR — 4 feuilles
     # =============================================================================
     wlpdo = _write_df_to_sheet(wb, "LatPeriodDepth_OBS", latpd_obs)
     _merge_cells_for_latband_period_depth(wlpdo, band_col=1, period_col=2, start_row=2)
@@ -1917,7 +1622,7 @@ def _generate_stats_outputs(df_yam_filtered: pd.DataFrame,
         _write_df_to_sheet(wb, "Scatter_SO_Combined_10-50_50-100_brute", scatter_combined_sh)
 
     # =============================================================================
-    # AJOUT : 3 CASE TABLES (OBS) — BA / Weddell / Ross
+    # 3 CASE TABLES (OBS) — BA / Weddell / Ross
     # =============================================================================
     # 1) BA 1930–1939 : 10–200 + 130–160 avec z
     case_ba = _build_case_table_depth_years_with_z(
@@ -1970,7 +1675,7 @@ def _generate_stats_outputs(df_yam_filtered: pd.DataFrame,
     xlsx_name = f"StatsTables_{season}_{depth_min}-{depth_max}m_{y0}-{y1-1}.xlsx"
     out_xlsx = out_dir / xlsx_name
     wb.save(out_xlsx)
-    print(f"\n✅ Excel stats généré : {out_xlsx.name}")
+    print(f"\n Excel stats généré : {out_xlsx.name}")
 
     # =============================================================================
     # PNG : Table1 + TableM + TableD (OBS/NEMO) + Scatter SO + LAT×DECADE + LAT×PERIODE×PROFONDEUR + CASES
@@ -1981,40 +1686,40 @@ def _generate_stats_outputs(df_yam_filtered: pd.DataFrame,
         out_png_t1_nem = out_dir / f"Table1_NEMO_{season}_{depth_min}-{depth_max}m_{y0}-{y1-1}.png"
         _save_table1_like_png(t1_obs, out_png_t1_obs, font_size=10, decimals=PNG_DECIMALS)
         _save_table1_like_png(t1_nem, out_png_t1_nem, font_size=10, decimals=PNG_DECIMALS)
-        print(f"✅ PNG Table1 OBS : {out_png_t1_obs.name}")
-        print(f"✅ PNG Table1 NEMO: {out_png_t1_nem.name}")
+        print(f" PNG Table1 OBS : {out_png_t1_obs.name}")
+        print(f" PNG Table1 NEMO: {out_png_t1_nem.name}")
 
         # ---- TableM
         out_png_tm_obs = out_dir / f"TableM_OBS_{season}_{depth_min}-{depth_max}m_{y0}-{y1-1}.png"
         out_png_tm_nem = out_dir / f"TableM_NEMO_{season}_{depth_min}-{depth_max}m_{y0}-{y1-1}.png"
         _save_table1_like_png(tm_obs, out_png_tm_obs, font_size=13, decimals=PNG_DECIMALS)
         _save_table1_like_png(tm_nem, out_png_tm_nem, font_size=13, decimals=PNG_DECIMALS)
-        print(f"✅ PNG TableM OBS : {out_png_tm_obs.name}")
-        print(f"✅ PNG TableM NEMO: {out_png_tm_nem.name}")
+        print(f" PNG TableM OBS : {out_png_tm_obs.name}")
+        print(f" PNG TableM NEMO: {out_png_tm_nem.name}")
 
         # ---- TableD
         out_png_td_obs = out_dir / f"TableD_OBS_{season}_{depth_min}-{depth_max}m_{y0}-{y1-1}.png"
         out_png_td_nem = out_dir / f"TableD_NEMO_{season}_{depth_min}-{depth_max}m_{y0}-{y1-1}.png"
         _save_tableD_png(td_obs, out_png_td_obs, font_size=10, decimals=PNG_DECIMALS)
         _save_tableD_png(td_nem, out_png_td_nem, font_size=10, decimals=PNG_DECIMALS)
-        print(f"✅ PNG TableD OBS : {out_png_td_obs.name}")
-        print(f"✅ PNG TableD NEMO: {out_png_td_nem.name}")
+        print(f" PNG TableD OBS : {out_png_td_obs.name}")
+        print(f" PNG TableD NEMO: {out_png_td_nem.name}")
 
         # ---- LAT×DECADE (OBS/NEMO)
         out_png_lat_obs = out_dir / f"LatDec_OBS_{season}_{depth_min}-{depth_max}m_{y0}-{y1-1}.png"
         out_png_lat_nem = out_dir / f"LatDec_NEMO_{season}_{depth_min}-{depth_max}m_{y0}-{y1-1}.png"
         _save_table_latband_decade_png(latdec_obs, out_png_lat_obs, font_size=10, decimals=PNG_DECIMALS)
         _save_table_latband_decade_png(latdec_nem, out_png_lat_nem, font_size=10, decimals=PNG_DECIMALS)
-        print(f"✅ PNG LatDec OBS : {out_png_lat_obs.name}")
-        print(f"✅ PNG LatDec NEMO: {out_png_lat_nem.name}")
+        print(f" PNG LatDec OBS : {out_png_lat_obs.name}")
+        print(f" PNG LatDec NEMO: {out_png_lat_nem.name}")
 
-        # ---- NOUVEAU : LAT×PERIODE×PROFONDEUR (OBS/NEMO)
+        # ---- LAT×PERIODE×PROFONDEUR (OBS/NEMO)
         out_png_latpd_obs = out_dir / f"LatPeriodDepth_OBS_{season}_{depth_min}-{depth_max}m_{y0}-{y1-1}.png"
         out_png_latpd_nem = out_dir / f"LatPeriodDepth_NEMO_{season}_{depth_min}-{depth_max}m_{y0}-{y1-1}.png"
         _save_table_latband_period_depth_png(latpd_obs, out_png_latpd_obs, font_size=10, decimals=PNG_DECIMALS)
         _save_table_latband_period_depth_png(latpd_nem, out_png_latpd_nem, font_size=10, decimals=PNG_DECIMALS)
-        print(f"✅ PNG LatPeriodDepth OBS : {out_png_latpd_obs.name}")
-        print(f"✅ PNG LatPeriodDepth NEMO: {out_png_latpd_nem.name}")
+        print(f" PNG LatPeriodDepth OBS : {out_png_latpd_obs.name}")
+        print(f" PNG LatPeriodDepth NEMO: {out_png_latpd_nem.name}")
 
         # ---- Scatter SO (standard + shallow)
         if enable_scatter_tables:
@@ -2057,11 +1762,11 @@ def _generate_stats_outputs(df_yam_filtered: pd.DataFrame,
                 decimals=PNG_DECIMALS
             )
 
-            print(f"✅ PNG Scatter SO OBS     : {out_png_sc_obs.name}")
-            print(f"✅ PNG Scatter SO NEMO    : {out_png_sc_nem.name}")
-            print(f"✅ PNG Scatter SO Combined: {out_png_sc_com.name}")
+            print(f" PNG Scatter SO OBS     : {out_png_sc_obs.name}")
+            print(f" PNG Scatter SO NEMO    : {out_png_sc_nem.name}")
+            print(f" PNG Scatter SO Combined: {out_png_sc_com.name}")
 
-            # --- AJOUT PNG shallow (10–50 / 50–100)
+            # --- PNG shallow (10–50 / 50–100)
             shallow_depths = [(10, 50), (50, 100)]
             scatter_obs_sh = _build_scatter_SO_table("OBS", obs_pts, depths=shallow_depths)
             scatter_nem_sh = _build_scatter_SO_table("NEMO", nemo_pts, depths=shallow_depths)
@@ -2102,25 +1807,25 @@ def _generate_stats_outputs(df_yam_filtered: pd.DataFrame,
                 decimals=PNG_DECIMALS
             )
 
-            print(f"✅ PNG Scatter SO OBS (10–50/50–100)     : {out_png_sc_obs_sh.name}")
-            print(f"✅ PNG Scatter SO NEMO (10–50/50–100)    : {out_png_sc_nem_sh.name}")
-            print(f"✅ PNG Scatter SO Combined (10–50/50–100): {out_png_sc_com_sh.name}")
+            print(f" PNG Scatter SO OBS (10–50/50–100)     : {out_png_sc_obs_sh.name}")
+            print(f" PNG Scatter SO NEMO (10–50/50–100)    : {out_png_sc_nem_sh.name}")
+            print(f" PNG Scatter SO Combined (10–50/50–100): {out_png_sc_com_sh.name}")
 
-        # ---- AJOUT PNG CASES
+        # ---- PNG CASES
         if not case_ba.empty:
             out_png_case_ba = out_dir / f"Case_BA_1930-1939_{season}_{depth_min}-{depth_max}m_{y0}-{y1-1}.png"
             _save_case_depth_table_png(case_ba, out_png_case_ba, font_size=12, decimals=PNG_DECIMALS)
-            print(f"✅ PNG Case BA : {out_png_case_ba.name}")
+            print(f" PNG Case BA : {out_png_case_ba.name}")
 
         if not case_wed.empty:
             out_png_case_wed = out_dir / f"Case_Weddell_1937-1957_{season}_{depth_min}-{depth_max}m_{y0}-{y1-1}.png"
             _save_case_year_table_png(case_wed, out_png_case_wed, font_size=12, decimals=PNG_DECIMALS)
-            print(f"✅ PNG Case Weddell : {out_png_case_wed.name}")
+            print(f" PNG Case Weddell : {out_png_case_wed.name}")
 
         if not case_ross.empty:
             out_png_case_ross = out_dir / f"Case_Ross_1920-1929_{season}_{depth_min}-{depth_max}m_{y0}-{y1-1}.png"
             _save_case_depth_table_png(case_ross, out_png_case_ross, font_size=12, decimals=PNG_DECIMALS)
-            print(f"✅ PNG Case Ross : {out_png_case_ross.name}")
+            print(f" PNG Case Ross : {out_png_case_ross.name}")
 
 
 # =============================================================================
@@ -2135,7 +1840,7 @@ def create_combined_panel(df_yamazaki, df_nemo, out_dir, season,
                           tables_make_png=True,
                           enable_scatter_tables=True):
     """Crée le panneau combiné 4×2 avec logique 0-360°."""
-    print(f"\n📊 Génération du panneau combiné 4×2...")
+    print(f"\n Génération du panneau combiné 4×2...")
 
     fig = plt.figure(figsize=(16, 18))
     gs = GridSpec(4, 2, figure=fig,
@@ -2196,7 +1901,7 @@ def create_combined_panel(df_yamazaki, df_nemo, out_dir, season,
         df_sea_yam = filter_by_sea(df_yam, sea_config)
         df_sea_nem = filter_by_sea(df_nem, sea_config)
 
-        print(f"\n🔍 {sea_name}:")
+        print(f"\n {sea_name}:")
         print(f"   Yamazaki: {len(df_sea_yam):,} points")
         if len(df_sea_yam) > 0:
             print(f"      Lon range: {df_sea_yam['hist_lon'].min():.1f}° to "
@@ -2278,7 +1983,7 @@ def create_combined_panel(df_yamazaki, df_nemo, out_dir, season,
     plt.savefig(out_path, dpi=200, bbox_inches='tight', facecolor='white')
     plt.close()
 
-    print(f"\n✅ Panneau combiné sauvegardé : {out_path.name}")
+    print(f"\n Panneau combiné sauvegardé : {out_path.name}")
 
     if enable_vertical_stats:
         _save_vertical_stats_table(stats_rows, out_dir, silent=False)
@@ -2322,36 +2027,36 @@ def main():
     print("PANNEAU COMBINÉ 4×2 : Yamazaki + NEMO (LON 0-360°)")
     print("=" * 80)
 
-    print("\n📂 Chargement Yamazaki...")
+    print("\n Chargement Yamazaki...")
     csv_pattern_yam = str(Path(args.yamazaki_csv_dir) /
                           "yamazaki_en4_wod_DJF_[0-9]*.csv")
     df_yamazaki = _safe_read_csvs(csv_pattern_yam)
 
     if df_yamazaki.empty:
-        print("❌ Aucune donnée Yamazaki trouvée")
+        print(" Aucune donnée Yamazaki trouvée")
         return
 
     if 'yamazaki_T' not in df_yamazaki.columns:
-        print("❌ Colonne 'yamazaki_T' manquante")
+        print(" Colonne 'yamazaki_T' manquante")
         return
 
-    print(f"   ✅ Yamazaki chargé: {len(df_yamazaki):,} lignes")
+    print(f"    Yamazaki chargé: {len(df_yamazaki):,} lignes")
 
-    print("\n📂 Chargement NEMO...")
+    print("\n Chargement NEMO...")
     csv_pattern_nemo = str(Path(args.nemo_csv_dir) /
                            "nemo_yamazaki_DJF_[0-9]*.csv")
     df_nemo = _safe_read_csvs(csv_pattern_nemo)
 
     if df_nemo.empty:
-        print("❌ Aucune donnée NEMO trouvée")
+        print(" Aucune donnée NEMO trouvée")
         return
 
     if ('nemo_recent_T' not in df_nemo.columns or
             'nemo_hist_T' not in df_nemo.columns):
-        print("❌ Colonnes NEMO manquantes")
+        print(" Colonnes NEMO manquantes")
         return
 
-    print(f"   ✅ NEMO chargé: {len(df_nemo):,} lignes")
+    print(f"    NEMO chargé: {len(df_nemo):,} lignes")
 
     create_combined_panel(
         df_yamazaki, df_nemo, out_dir,
@@ -2364,7 +2069,7 @@ def main():
         enable_scatter_tables=(not args.disable_scatter_tables)
     )
 
-    print(f"\n{'=' * 80}\n✅ TERMINÉ\n{'=' * 80}")
+    print(f"\n{'=' * 80}\n TERMINÉ\n{'=' * 80}")
 
 
 if __name__ == "__main__":

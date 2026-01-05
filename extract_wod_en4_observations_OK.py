@@ -1,27 +1,9 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-yamazaki_en4_wod_comparison_v3.py  (MODIFIÉ: "Yamazaki-only" pour la référence récente)
---------------------------------------------------------------------------------------
-Script robuste pour comparer EN4/WOD (1900-1969) avec Yamazaki (climatologie mensuelle).
-
-CHANGEMENT CLÉ (conforme à ce qu'on a acté) :
-- On NE collecte PLUS d'observations "récentes" EN4/WOD (2005-2025).
-- La "référence récente" utilisée partout est uniquement Yamazaki :
-  pour chaque observation historique conservée après déduplication,
-  on échantillonne Yamazaki au plus proche voisin (lat/lon/depth) pour le même mois.
-
-MÉTHODOLOGIE "PLUS PROCHE VOISIN" (conforme à ton screenshot) :
-- Horizontal (Eq. 1) : on choisit (i,j) qui minimise
-    d(i,j) = sqrt( (lat_ij - lat_obs)^2 + (lon_ij - lon_obs)^2 )
-- Vertical (Eq. 2) : une fois (i,j) trouvé, on choisit k qui minimise
-    |depth_k - depth_obs|
-
-CONTRAINTES :
-- Longitudes : on travaille en [-180,180]. On utilise une différence en longitude "wrap"
-  (distance minimale) pour éviter des erreurs près de +/-180.
-- Les colonnes des CSV exportés restent IDENTIQUES (mêmes noms) :
-  - CSV principal : recent_count / recent_mean / recent_std conservées mais neutralisées.
+Commande d'éxécution :
+python3 ~/Thesis/Codes/extract_nemo_at_yamazaki_positions_OK.py \
+  --yamazaki-csv-dir ~/Thesis/Yamazaki/Datas/Datas_OK \
+  --nemo-nc ~/Thesis/NEMO/Datas/thetao_1900-1969_2005-2023_60S-90S_10-200m_MONTHLY.nc \
+  --out-dir ~/Thesis/NEMO/Datas/Datas_OK
 """
 
 import argparse
@@ -54,7 +36,7 @@ DECADES = [
 # Tolérances strictes pour déduplication
 STRICT_LAT_TOL = 0.01      # ~1 km
 STRICT_LON_TOL = 0.01      # ~1 km
-STRICT_DEPTH_TOL = 0.5     # m
+STRICT_DEPTH_TOL = 1       # (ou 0.5 selon tolérance)
 STRICT_TEMP_TOL = 0.28     # °C
 
 # Filtres géographiques et temporels
@@ -76,10 +58,7 @@ def normalize_lon(lon):
     return ((lon + 180.0) % 360.0) - 180.0
 
 def lon_diff_deg(lon_a, lon_b):
-    """
-    Différence minimale (wrap) en degrés entre deux longitudes.
-    Retour dans [-180, 180).
-    """
+   
     return normalize_lon(np.asarray(lon_a, dtype=float) - float(lon_b))
 
 def parse_cf_time(time_vals, units, calendar):
@@ -92,7 +71,7 @@ def parse_cf_time(time_vals, units, calendar):
         days = np.array([d.day for d in dates], dtype=int)
         return years, months, days
     except Exception as e:
-        print(f"⚠️  Erreur parse temps : {e}")
+        print(f"  Erreur parse temps : {e}")
         shape = np.shape(time_vals) or (1,)
         fill = np.full(shape, -999, dtype=int)
         return fill, fill, fill
@@ -106,7 +85,7 @@ class YamazakiClim:
     """Classe pour échantillonner la climatologie Yamazaki."""
 
     def __init__(self, nc_path):
-        print(f"📂 Chargement Yamazaki: {nc_path}")
+        print(f" Chargement Yamazaki: {nc_path}")
         self.ds = xr.open_dataset(str(nc_path), decode_times=False)
 
         self.lats = np.asarray(self.ds["latitude"].values, dtype=float)     # (nlat,)
@@ -115,7 +94,7 @@ class YamazakiClim:
         self.temp = np.asarray(self.ds["temp"].values, dtype=float)         # (dep, month, lat, lon)
         self.err  = np.asarray(self.ds["temp_err"].values, dtype=float)     # (dep, month, lat, lon)
 
-        # Sécuriser convention lon interne (au cas où)
+        # Sécuriser convention lon interne
         self.lons = normalize_lon(self.lons)
 
         print(f"   ✓ Yamazaki chargé: {len(self.lats)} lats, {len(self.lons)} lons, {len(self.deps)} depths")
@@ -134,7 +113,7 @@ class YamazakiClim:
 
         lon = float(normalize_lon(lon))
 
-        # Vérifier limites lat/depth (lon : on accepte via wrap, mais on garde une barrière simple)
+        # Vérifier limites lat/depth 
         if depth < float(np.nanmin(self.deps)) or depth > float(np.nanmax(self.deps)):
             return (np.nan, np.nan, np.nan, np.nan, np.nan)
         if lat < float(np.nanmin(self.lats)) or lat > float(np.nanmax(self.lats)):
@@ -314,7 +293,7 @@ def read_en4_profiles(nc_path, year_min, year_max, season_months,
         ds.close()
 
     except Exception as e:
-        print(f"⚠️  Erreur lecture {nc_path.name}: {e}")
+        print(f"  Erreur lecture {nc_path.name}: {e}")
 
     return profiles
 
@@ -401,7 +380,7 @@ def read_wod_profiles(nc_path, year_min, year_max, season_months,
         ds.close()
 
     except Exception as e:
-        print(f"⚠️  Erreur lecture {nc_path.name}: {e}")
+        print(f"  Erreur lecture {nc_path.name}: {e}")
 
     return profiles
 
@@ -413,11 +392,11 @@ def read_wod_profiles(nc_path, year_min, year_max, season_months,
 def deduplicate_profiles(profiles):
     """
     Déduplique les profils selon critères stricts:
-    - Même jour + lat/lon (±0.01°) + profondeur (±0.5m)
+    - Même jour + lat/lon (±0.01°) + profondeur (±0.5m ou 1m)
     - Si températures dans une enveloppe <= STRICT_TEMP_TOL → garder 1 (priorité EN4)
     - Sinon → supprimer tous
     """
-    print(f"🔧 Déduplication de {len(profiles):,} profils...")
+    print(f" Déduplication de {len(profiles):,} profils...")
 
     grouped = defaultdict(list)
 
@@ -455,9 +434,9 @@ def deduplicate_profiles(profiles):
         else:
             n_removed_diff_temps += len(group)
 
-    print(f"   ✓ {len(deduplicated):,} profils conservés")
-    print(f"   ✗ {n_removed_duplicates:,} doublons retirés (T compatibles)")
-    print(f"   ✗ {n_removed_diff_temps:,} retirés (T différentes)")
+    print(f"    {len(deduplicated):,} profils conservés")
+    print(f"    {n_removed_duplicates:,} doublons retirés (T compatibles)")
+    print(f"    {n_removed_diff_temps:,} retirés (T différentes)")
 
     return deduplicated
 
@@ -474,13 +453,13 @@ def collect_historical_decade(en4_dir, wod_dir, decade_start, decade_end,
     Retourne: liste de profils dédupliqués
     """
     print(f"\n{'='*80}")
-    print(f"📅 DÉCENNIE {decade_start}-{decade_end}")
+    print(f" DÉCENNIE {decade_start}-{decade_end}")
     print(f"{'='*80}")
 
     all_profiles = []
 
     # EN4
-    print(f"\n📂 Lecture EN4 ({decade_start}-{decade_end})...")
+    print(f"\n Lecture EN4 ({decade_start}-{decade_end})...")
     en4_path = Path(en4_dir)
     en4_count = 0
 
@@ -500,10 +479,10 @@ def collect_historical_decade(en4_dir, wod_dir, decade_start, decade_end,
             if len(all_profiles) % 50000 == 0 and len(all_profiles) > 0:
                 print(f"   ... {len(all_profiles):,} profils collectés")
 
-    print(f"   ✓ EN4: {en4_count:,} profils")
+    print(f"    EN4: {en4_count:,} profils")
 
     # WOD
-    print(f"\n📂 Lecture WOD ({decade_start}-{decade_end})...")
+    print(f"\n Lecture WOD ({decade_start}-{decade_end})...")
     wod_path = Path(wod_dir)
     wod_count = 0
 
@@ -521,8 +500,8 @@ def collect_historical_decade(en4_dir, wod_dir, decade_start, decade_end,
         if len(all_profiles) % 50000 == 0:
             print(f"   ... {len(all_profiles):,} profils collectés")
 
-    print(f"   ✓ WOD: {wod_count:,} profils")
-    print(f"\n📊 Total collecté: {len(all_profiles):,} profils")
+    print(f"    WOD: {wod_count:,} profils")
+    print(f"\n Total collecté: {len(all_profiles):,} profils")
 
     deduplicated = deduplicate_profiles(all_profiles)
 
@@ -540,7 +519,7 @@ def enrich_with_yamazaki(profiles, yamazaki):
     """
     Ajoute les valeurs Yamazaki à chaque profil (nearest neighbor Eq.1 + Eq.2).
     """
-    print(f"\n🌡️  Enrichissement Yamazaki...")
+    print(f"\n  Enrichissement Yamazaki...")
 
     dist_lats = []
     dist_lons = []
@@ -567,7 +546,7 @@ def enrich_with_yamazaki(profiles, yamazaki):
     print(f"   ✓ {n_with_yam:,} / {len(profiles):,} profils avec Yamazaki")
 
     if dist_lats:
-        print(f"\n   📊 Distances Yamazaki (plus proche voisin):")
+        print(f"\n    Distances Yamazaki (plus proche voisin):")
         print(f"      Latitude  : max={max(dist_lats):.4f}°, mean={np.mean(dist_lats):.4f}°, median={np.median(dist_lats):.4f}°")
         print(f"      Longitude : max={max(dist_lons):.4f}°, mean={np.mean(dist_lons):.4f}°, median={np.median(dist_lons):.4f}°")
         print(f"      Profondeur: max={max(dist_depths):.2f}m, mean={np.mean(dist_depths):.2f}m, median={np.median(dist_depths):.2f}m")
@@ -590,14 +569,14 @@ def export_decade_csv(profiles, out_dir, decade_start, decade_end, season):
     prefix = f"yamazaki_en4_wod_{season}_{decade_start}_{decade_end}"
     csv_main = out_dir / f"{prefix}.csv"
 
-    print(f"\n💾 Export CSV...")
+    print(f"\n Export CSV...")
     print(f"   Principal: {csv_main.name}")
 
     profiles_valid = [p for p in profiles if np.isfinite(p.get('yamazaki_T', np.nan))]
 
     n_drop = len(profiles) - len(profiles_valid)
     if n_drop > 0:
-        print(f"   ⚠️  {n_drop:,} profils exclus (pas de valeur Yamazaki valide / hors grille)")
+        print(f"     {n_drop:,} profils exclus (pas de valeur Yamazaki valide / hors grille)")
 
     with open(csv_main, 'w') as f:
         f.write("source,hist_year,hist_month,hist_day,hist_lat,hist_lon,hist_depth_m,")
@@ -634,7 +613,7 @@ def export_decade_csv(profiles, out_dir, decade_start, decade_end, season):
             if (i + 1) % 10000 == 0:
                 print(f"   ... {i+1:,} / {len(profiles_valid):,} lignes écrites (principal)")
 
-    print(f"   ✓ CSV principal: {len(profiles_valid):,} lignes")
+    print(f"    CSV principal: {len(profiles_valid):,} lignes")
 
 
 # ============================================================================
@@ -677,7 +656,7 @@ def main():
 
     for decade_start, decade_end in DECADES:
         if decade_start < args.start_decade:
-            print(f"\n⏭️  Skip décennie {decade_start}-{decade_end} (déjà traitée)")
+            print(f"\n  Skip décennie {decade_start}-{decade_end} (déjà traitée)")
             continue
 
         historical_profiles = collect_historical_decade(
@@ -686,7 +665,7 @@ def main():
         )
 
         if len(historical_profiles) == 0:
-            print(f"⚠️  Aucune observation pour {decade_start}-{decade_end}, skip")
+            print(f"  Aucune observation pour {decade_start}-{decade_end}, skip")
             continue
 
         historical_profiles = enrich_with_yamazaki(historical_profiles, yamazaki)
@@ -702,7 +681,7 @@ def main():
     yamazaki.close()
 
     print("\n" + "="*80)
-    print("✅ TERMINÉ")
+    print(" TERMINÉ")
     print("="*80)
 
 

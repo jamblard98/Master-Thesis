@@ -1,15 +1,18 @@
-#!/usr/bin/env python3
 """
-extract_nemo_by_decade.py
+commande d'execution : 
+python3 ~/Thesis/Codes/extract_nemo_at_yamazaki_positions_OK.py \
+  --yamazaki-csv-dir ~/Thesis/Yamazaki/Datas/Datas_OK \
+  --nemo-nc ~/Thesis/NEMO/Datas/thetao_1900-1969_2005-2023_60S-90S_10-200m_MONTHLY.nc \
+  --out-dir ~/Thesis/NEMO/Datas/Datas_OK
 
 Extrait NEMO aux positions des OBSERVATIONS HISTORIQUES (EN4/WOD) contenues dans les CSV
-produits par yamazaki_en4_wod_comparison_v3.py.
+produits par extract_wod_en4_observations_OK.py
 
 Format de sortie (1 obs historique × 19 années récentes = 19 lignes):
   source, hist_year, hist_month, hist_day, hist_lat, hist_lon, hist_depth_m,
   hist_temperature, yamazaki_T, nemo_hist_T, recent_year, nemo_recent_T
 
-MÉTHODOLOGIE "PLUS PROCHE VOISIN" (conforme à ton screenshot) :
+MÉTHODOLOGIE "PLUS PROCHE VOISIN"  :
 - Horizontal (Eq. 1) : on choisit (i,j) qui minimise
     d(i,j) = sqrt( (lat_ij - lat_obs)^2 + (lon_ij - lon_obs)^2 )
 - Vertical (Eq. 2) : une fois (i,j) trouvé, on choisit k qui minimise
@@ -97,7 +100,7 @@ def load_yamazaki_csv_decade(csv_dir, decade_start, decade_end):
 
 def load_nemo(nc_path):
     """Charge NetCDF NEMO + index temporel (year, month) -> t_idx."""
-    print(f"\n📂 Chargement NEMO: {nc_path}")
+    print(f"\n Chargement NEMO: {nc_path}")
     ds = xr.open_dataset(nc_path, decode_times=False)
 
     time_sec = ds["time_counter"].values.astype(float)
@@ -112,10 +115,10 @@ def load_nemo(nc_path):
     depths = ds["deptht"].values.astype(float)
     temp = ds["thetao"].values
 
-    print(f"   ✓ NEMO: {len(years)} pas de temps, {len(depths)} profondeurs")
-    print(f"   ✓ Grille: {lats.shape}")
-    print(f"   ✓ Années: {years.min():.0f}-{years.max():.0f}")
-    print(f"   ✓ Longitudes NEMO normalisées en [-180,180) en interne")
+    print(f"    NEMO: {len(years)} pas de temps, {len(depths)} profondeurs")
+    print(f"    Grille: {lats.shape}")
+    print(f"    Années: {years.min():.0f}-{years.max():.0f}")
+    print(f"    Longitudes NEMO normalisées en [-180,180) en interne")
 
     time_index = {}
     for t_idx in range(len(years)):
@@ -164,8 +167,8 @@ def extract_nemo_for_decade(df_decade, nemo, out_dir, decade_start, decade_end):
     total_obs = len(df_decade)
     n_chunks = (total_obs + CHUNK_SIZE - 1) // CHUNK_SIZE
 
-    print(f"📦 Traitement par chunks de {CHUNK_SIZE:,} observations")
-    print(f"📦 Nombre de chunks: {n_chunks}")
+    print(f" Traitement par chunks de {CHUNK_SIZE:,} observations")
+    print(f" Nombre de chunks: {n_chunks}")
 
     first_write = True
 
@@ -174,7 +177,7 @@ def extract_nemo_for_decade(df_decade, nemo, out_dir, decade_start, decade_end):
         end_idx = min(start_idx + CHUNK_SIZE, total_obs)
 
         df_chunk = df_decade.iloc[start_idx:end_idx]
-        print(f"\n   📦 Chunk {chunk_idx+1}/{n_chunks}: lignes {start_idx:,} à {end_idx:,}")
+        print(f"\n    Chunk {chunk_idx+1}/{n_chunks}: lignes {start_idx:,} à {end_idx:,}")
 
         rows = []
 
@@ -217,7 +220,7 @@ def extract_nemo_for_decade(df_decade, nemo, out_dir, decade_start, decade_end):
             else:
                 count_no_nemo_hist += 1
 
-            # logique identique à avant : skip si pas de NEMO historique valide
+            # skip si pas de NEMO historique valide
             if not np.isfinite(nemo_hist_T):
                 continue
 
@@ -256,14 +259,14 @@ def extract_nemo_for_decade(df_decade, nemo, out_dir, decade_start, decade_end):
 
     print(f"\n   ✓ {count_valid_hist:,} observations avec NEMO historique valide")
     if count_no_nemo_hist > 0:
-        print(f"   ⚠️  {count_no_nemo_hist:,} observations sans NEMO historique (exclues)")
+        print(f"     {count_no_nemo_hist:,} observations sans NEMO historique (exclues)")
 
     if out_csv.exists():
         size_mb = out_csv.stat().st_size / (1024**2)
-        print(f"\n   ✅ CSV créé: {out_csv.name}")
+        print(f"\n    CSV créé: {out_csv.name}")
         print(f"      Taille: {size_mb:.1f} MB")
     else:
-        print(f"\n   ⚠️  Aucun CSV écrit (aucune obs NEMO historique valide)")
+        print(f"\n     Aucun CSV écrit (aucune obs NEMO historique valide)")
 
     return count_valid_hist * len(RECENT_YEARS)
 
@@ -295,23 +298,23 @@ def main():
             total_rows += n_rows
 
         except FileNotFoundError as e:
-            print(f"   ⏭️  Skip: {e}")
+            print(f"     Skip: {e}")
         except Exception as e:
-            print(f"   ❌ Erreur: {e}")
+            print(f"     Erreur: {e}")
 
         if df_decade is not None:
             del df_decade
         gc.collect()
-        print(f"   🧹 Mémoire libérée")
+        print(f"    Mémoire libérée")
 
     nemo['ds'].close()
 
     print(f"\n{'='*80}")
-    print("✅ EXTRACTION TERMINÉE")
+    print(" EXTRACTION TERMINÉE")
     print(f"{'='*80}")
-    print(f"\n✅ {total_rows:,} lignes estimées au total")
-    print(f"✅ 7 fichiers CSV créés dans {out_dir}")
-    print(f"\n🎯 Fichiers prêts pour nemo_and_histo_profiles.py")
+    print(f"\n {total_rows:,} lignes estimées au total")
+    print(f" 7 fichiers CSV créés dans {out_dir}")
+    print(f"\n Fichiers prêts pour nemo_and_histo_profiles.py")
 
 
 if __name__ == "__main__":
