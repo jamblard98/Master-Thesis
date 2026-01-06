@@ -1,10 +1,11 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 """
-nemo_and_histo_profiles.py (ALIGNED with Yamazaki DA) — FIXED METHOD
--------------------------------------------------------------------
-Attendu (selon tes consignes) :
+commande d'éxéction : 
+python3 ~/Thesis/NEMO/Codes/nemo_and_histo_profiles_OK.py \
+  --csv-dir  ~/Thesis/NEMO/Datas/Datas_OK \
+  --nemo-nc  ~/Thesis/NEMO/Datas/thetao_1900-1969_2005-2023_60S-90S_10-200m_MONTHLY.nc \
+  --out-dir  ~/Thesis/NEMO/Outputs \
+  --season DJF \
+  --depth-min 10 --depth-max 200
 
 FIG.1 (profils):
 - Points bleus : historique NEMO aux positions d'observations (CSV Datas_OK racine)
@@ -14,13 +15,12 @@ FIG.1 (profils):
   depuis niveaux NetCDF, APRES calcul des mu_native et sigma_native.
 
 FIG.2 (scatter):
-- Comparaison point-par-point (comme avant) :
+- Comparaison point-par-point :
     x = nemo_hist_T
     y = T_ref = moyenne (2005–2023) de nemo_recent_T pour ce point historique précis
 - T_ref (et std) sont recalculés depuis les CSV via recent_year + nemo_recent_T.
   On n'utilise PAS un profil spatial NetCDF pour le scatter.
 
-IMPORTANT:
 - csv-dir = Datas_OK (racine)
 - nemo-nc = thetao_1900-1969_2005-2023_60S-90S_10-200m_MONTHLY.nc
 """
@@ -36,13 +36,13 @@ import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
-from matplotlib.ticker import MultipleLocator  # <-- AJOUT (ticks pas=1)
+from matplotlib.ticker import MultipleLocator  # <-- (ticks pas=1)
 
 import xarray as xr
 
 
 # =============================================================================
-# PARAMÈTRES VISUELS (alignés sur Yamazaki, DA conservée)
+# PARAMÈTRES VISUELS 
 # =============================================================================
 
 LEGEND_FONTSIZE = 11
@@ -63,7 +63,7 @@ SEASON_MONTHS = {
 }
 
 # =============================================================================
-# DÉFINITION DES MERS (0-360° sens horaire) — identique à vos conventions
+# DÉFINITION DES MERS (0-360° sens horaire) 
 # =============================================================================
 
 SEAS = {
@@ -432,7 +432,7 @@ def load_unique_points_with_tref(csv_dir, season, depth_min, depth_max, y0, y1,
 
 
 # =============================================================================
-# FIGURE 1 NEW : NEMO (mers)
+# FIGURE 1 : NEMO (mers)
 # =============================================================================
 
 def _plot_nemo_new_on_ax_sea(ax, dec0, dec1, sea_name,
@@ -568,11 +568,11 @@ def plot_1_nemo_new_seas_panels(df_points, recent_provider,
     out_path = out_dir / f"{prefix}_1NEW_nemo_seas_1900-1929_1930-1969.png"
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
-    print(f"✅ Panel NEW mers: {out_path.name}")
+    print(f" Panel mers: {out_path.name}")
 
 
 # =============================================================================
-# FIGURE 1 OLD : latbands 7×2 (1900–1969)
+# FIGURE 1 : latbands 7×2 (1900–1969)
 # =============================================================================
 
 def _plot_nemo_latband_on_ax(ax, dec0, dec1, lat_min, lat_max,
@@ -704,11 +704,11 @@ def plot_1_nemo_latband_panels_1900_1969(df_points, recent_provider,
 
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
-    print(f"✅ Panel latbands 1900-1969: {out_path.name}")
+    print(f" Panel latbands 1900-1969: {out_path.name}")
 
 
 # =============================================================================
-# FIGURE 2 : Scatter no_reg (STRICTEMENT point-par-point via CSV)
+# FIGURE 2 : Scatter (STRICTEMENT point-par-point via CSV)
 # =============================================================================
 
 def plot_2_no_reg(df_points_period, out_path, title_str):
@@ -726,7 +726,7 @@ def plot_2_no_reg(df_points_period, out_path, title_str):
     # garder uniquement points avec T_ref calculable
     df_scatter = df_points_period.dropna(subset=["nemo_hist_T", "T_ref"]).copy()
     if df_scatter.empty:
-        print("⚠️ Scatter: aucune donnée (nemo_hist_T ou T_ref manquant).")
+        print(" Scatter: aucune donnée (nemo_hist_T ou T_ref manquant).")
         return
 
     fig = plt.figure(figsize=(12, 11))
@@ -816,7 +816,7 @@ def plot_2_no_reg(df_points_period, out_path, title_str):
 
     fig.savefig(out_path, dpi=150, bbox_inches='tight')
     plt.close(fig)
-    print(f"✅ Scatter: {out_path.name}")
+    print(f" Scatter: {out_path.name}")
 
 
 # =============================================================================
@@ -850,7 +850,7 @@ def main():
     print("=" * 80)
 
     # 1) Charger points uniques + T_ref (point-par-point) depuis CSV
-    print("\n📂 Construction des points uniques + T_ref (CSV, 2005–2023) ...")
+    print("\n Construction des points uniques + T_ref (CSV, 2005–2023) ...")
     df_points = load_unique_points_with_tref(
         args.csv_dir, args.season,
         args.depth_min, args.depth_max,
@@ -871,7 +871,7 @@ def main():
     prefix = f"nemo_{args.season}_{int(args.depth_min)}-{int(args.depth_max)}m"
 
     # FIG.1 NEW (mers)
-    print("\n📊 Génération Fig.1 NEW NEMO (panneau mers)...")
+    print("\n Génération Fig.1 NEW NEMO (panneau mers)...")
     plot_1_nemo_new_seas_panels(
         df_points, recent_provider,
         out_dir, prefix,
@@ -879,7 +879,7 @@ def main():
     )
 
     # FIG.1 OLD (latbands)
-    print("\n📊 Génération Fig.1 OLD NEMO (panneau latbands 1900-1969, 7×2)...")
+    print("\n Génération Fig.1 OLD NEMO (panneau latbands 1900-1969, 7×2)...")
     plot_1_nemo_latband_panels_1900_1969(
         df_points, recent_provider,
         out_dir, prefix,
@@ -888,7 +888,7 @@ def main():
     )
 
     # latbands par mer (optionnel, comme votre version)
-    print("\n📊 Génération latbands par mer (Weddell, Bellingshausen-Amundsen)...")
+    print("\n Génération latbands par mer (Weddell, Bellingshausen-Amundsen)...")
     for sea in ['Weddell', 'Bellingshausen-Amundsen']:
         plot_1_nemo_latband_panels_1900_1969(
             df_points, recent_provider,
@@ -898,7 +898,7 @@ def main():
         )
 
     # FIG.2 Scatter (1900-1929)
-    print("\n📊 Génération Plot 2 NEMO (scatter 1900-1929) [point-par-point CSV] ...")
+    print("\n Génération Plot 2 NEMO (scatter 1900-1929) [point-par-point CSV] ...")
     df_1900 = df_points[(df_points["hist_year"] >= 1900) & (df_points["hist_year"] < 1930)].copy()
     title_1900 = f"Saison: {args.season} | Période: 1900-1929"
     plot_2_no_reg(
@@ -908,7 +908,7 @@ def main():
     )
 
     # FIG.2 Scatter (1930-1969)
-    print("\n📊 Génération Plot 2 NEMO (scatter 1930-1969) [point-par-point CSV] ...")
+    print("\n Génération Plot 2 NEMO (scatter 1930-1969) [point-par-point CSV] ...")
     df_1930 = df_points[(df_points["hist_year"] >= 1930) & (df_points["hist_year"] < 1970)].copy()
     title_1930 = f"Saison: {args.season} | Période: 1930-1969"
     plot_2_no_reg(
@@ -917,7 +917,7 @@ def main():
         title_1930
     )
 
-    print("\n✅ Génération terminée.")
+    print("\n Génération terminée.")
 
 
 if __name__ == "__main__":

@@ -1,8 +1,10 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 """
-yamazaki_and_histo_maps.py
+commande d'éxécution : 
+python3 ~/Thesis/Yamazaki/Codes/yamazaki_and_histo_maps.py \
+  --csv-dir ~/Thesis/Yamazaki/Datas/Datas_OK \
+  --out-dir ~/Thesis/Yamazaki/Outputs \
+  --season DJF
+
 ---------------------------
 Générateur de cartes polaires antarctiques Yamazaki vs Observations Historiques.
 
@@ -14,7 +16,7 @@ Génère :
     * Panel 2 : 1930–1939, 1940–1949, 1950–1959, 1960–1969 (4 lignes × 2 profondeurs)
     * Panel 3 : 1900–1929, 1930–1969 (2 lignes × 2 profondeurs)
 
-Inputs  : ~/Thesis/Yamazaki/Datas/yamazaki_en4_wod_DJF_*.csv
+Inputs  : ~/Thesis/Yamazaki/Datas/Datas_OK/yamazaki_en4_wod_DJF_*.csv
 Outputs : ~/Thesis/Yamazaki/Outputs/*.png
 """
 
@@ -109,9 +111,9 @@ def load_csv_data(csv_dir: Path):
     csv_files = [f for f in csv_files if "_details" not in f.name]
 
     if not csv_files:
-        raise ValueError(f"❌ Aucun CSV trouvé dans {csv_dir}")
+        raise ValueError(f" Aucun CSV trouvé dans {csv_dir}")
 
-    print(f"📂 {len(csv_files)} fichiers CSV trouvés")
+    print(f" {len(csv_files)} fichiers CSV trouvés")
 
     dfs = []
     for csv_path in csv_files:
@@ -120,14 +122,14 @@ def load_csv_data(csv_dir: Path):
             df = pd.read_csv(csv_path, low_memory=False, na_filter=True, keep_default_na=True)
             dfs.append(df)
         except Exception as e:
-            print(f"⚠️  Erreur lecture {csv_path.name}: {e}")
+            print(f"  Erreur lecture {csv_path.name}: {e}")
             continue
 
     if not dfs:
-        raise ValueError("❌ Aucun CSV valide chargé")
+        raise ValueError(" Aucun CSV valide chargé")
 
     df_all = pd.concat(dfs, ignore_index=True)
-    print(f"✅ {len(df_all):,} observations chargées")
+    print(f" {len(df_all):,} observations chargées")
     return df_all
 
 
@@ -337,7 +339,7 @@ def create_decadal_panels(df_all, out_dir, season):
             depth_100_200 = (d_min, d_max, d_str)
 
     if depth_10_100 is None or depth_100_200 is None:
-        print("⚠️ Impossible de trouver les profondeurs 10-100m et 100-200m.")
+        print(" Impossible de trouver les profondeurs 10-100m et 100-200m.")
         return
 
     d1_min, d1_max, d1_str = depth_10_100
@@ -362,7 +364,7 @@ def create_decadal_panels(df_all, out_dir, season):
     ]
 
     # ---------- Panel 1 : 3 périodes (3×2)
-    print("\n📊 Génération Panel 1 (1900-1929)...")
+    print("\n Génération Panel 1 (1900-1929)...")
     fig1, axes1 = plt.subplots(
         nrows=3,
         ncols=2,
@@ -424,10 +426,10 @@ def create_decadal_panels(df_all, out_dir, season):
     panel1_path = out_dir / f"YAMA_panel_gridded_2deg_{season}_1900-1929_3x2.png"
     fig1.savefig(panel1_path, dpi=300)
     plt.close(fig1)
-    print(f"✅ {panel1_path.name}")
+    print(f" {panel1_path.name}")
 
     # ---------- Panel 2 : 4 périodes (4×2)
-    print("\n📊 Génération Panel 2 (1930-1969)...")
+    print("\n Génération Panel 2 (1930-1969)...")
     fig2, axes2 = plt.subplots(
         nrows=4,
         ncols=2,
@@ -489,10 +491,10 @@ def create_decadal_panels(df_all, out_dir, season):
     panel2_path = out_dir / f"YAMA_panel_gridded_2deg_{season}_1930-1969_4x2.png"
     fig2.savefig(panel2_path, dpi=300)
     plt.close(fig2)
-    print(f"✅ {panel2_path.name}")
+    print(f" {panel2_path.name}")
 
     # ---------- Panel 3 : 2 grandes périodes (2×2)
-    print("\n📊 Génération Panel 3 (1900-1929 vs 1930-1969)...")
+    print("\n Génération Panel 3 (1900-1929 vs 1930-1969)...")
     fig3, axes3 = plt.subplots(
         nrows=2,
         ncols=2,
@@ -551,7 +553,7 @@ def create_decadal_panels(df_all, out_dir, season):
     panel3_path = out_dir / f"YAMA_panel_gridded_2deg_{season}_1900-1969_2x2.png"
     fig3.savefig(panel3_path, dpi=300)
     plt.close(fig3)
-    print(f"✅ {panel3_path.name}")
+    print(f" {panel3_path.name}")
 
 
 # =====================================================================
@@ -574,24 +576,24 @@ def generate_all_maps(df_all, out_dir, season):
             )
 
             if len(df_filtered) == 0:
-                print(f"⏭️  Skip {period_str} | {depth_str} (aucune donnée)")
+                print(f"  Skip {period_str} | {depth_str} (aucune donnée)")
                 continue
 
             df_check = compute_delta_T(df_filtered)
             n_obs_valide = len(df_check)
 
-            print(f"\n📍 {period_str} | {depth_str}")
+            print(f"\n {period_str} | {depth_str}")
             print(f"   {len(df_filtered):,} obs totales, {n_obs_valide:,} avec delta_T valide")
 
             # Carte localisation
             loc_path = out_dir / f"YAMA_locations_{season}_{depth_str}_{period_str}.png"
             plot_historical_locations(df_filtered, loc_path, season, depth_str, period_str)
-            print(f"   ✅ Localisation : {loc_path.name}")
+            print(f"    Localisation : {loc_path.name}")
 
             # Carte gridded 2°×2°
             grid2_path = out_dir / f"YAMA_gridded_2deg_{season}_{depth_str}_{period_str}.png"
             plot_gridded_mean_2deg(df_filtered, grid2_path, season, depth_str, period_str)
-            print(f"   ✅ Griddée 2°×2° : {grid2_path.name}")
+            print(f"    Griddée 2°×2° : {grid2_path.name}")
 
 
 # =====================================================================
@@ -628,7 +630,7 @@ def main():
     create_decadal_panels(df_all, args.out_dir, args.season)
 
     print(f"\n{'='*80}")
-    print("✅ TERMINÉ")
+    print(" TERMINÉ")
     print(f"{'='*80}")
 
 

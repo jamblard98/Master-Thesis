@@ -1,16 +1,12 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-map_generator_nemo_vs_nemo_OPTIMIZED_PANELS.py
+commande d'execution :
+python3 ~/Thesis/NEMO/Codes/nemo_and_histo_maps_OK.py \
+  --csv-dir ~/Thesis/NEMO/Datas/Datas_OK \
+  --out-dir ~/Thesis/NEMO/Outputs \
+  --season DJF
 
 Générateur de cartes polaires antarctiques pour ΔT NEMO vs NEMO :
-
     ΔT = nemo_hist_T - nemo_recent_mean(2005–2023)  (définition "théorique")
-
-IMPORTANT (implémentation cohérente avec votre code existant) :
-- Le code ci-dessous conserve votre convention de signe telle qu'écrite dans votre code :
-      delta_T = nemo_hist_T - nemo_recent_mean
-  (si vous voulez l'inverse, dites-le et je retourne une version "delta_T = recent - hist".)
 
 Fonctionnalités :
 - Lecture optimisée par décennie (un fichier à la fois).
@@ -18,7 +14,6 @@ Fonctionnalités :
       nemo_yamazaki_DJF_1900_1909.csv
       nemo_yamazaki_DJF_1910_1919.csv
       ...
-  (NOTE: underscore "_" et pas tiret "-")
 - Les CSV contiennent 1 obs historique × 19 années récentes (recent_year, nemo_recent_T).
   => On regroupe par observation historique et on moyenne uniquement recent_year 2005–2023.
 - Cartes individuelles 2°×2°.
@@ -139,10 +134,10 @@ def load_decade(csv_dir, y_start, y_end, season, chunksize=1_000_000):
     csv_file = _decade_csv_path(Path(csv_dir), season, decade_label)
 
     if not csv_file.exists():
-        print(f"   ⚠️ Fichier manquant : {csv_file.name}")
+        print(f"    Fichier manquant : {csv_file.name}")
         return pd.DataFrame()
 
-    print(f"   📂 Chargement {csv_file.name}...", end=" ", flush=True)
+    print(f"    Chargement {csv_file.name}...", end=" ", flush=True)
 
     season_months = SEASON_MONTHS[season]
     chunks = []
@@ -259,10 +254,10 @@ def compute_fused_grid_period(csv_dir, season, depth_min, depth_max,
     for y0, y1, label in decades_subset:
         csv_file = _decade_csv_path(Path(csv_dir), season, label)
         if not csv_file.exists():
-            print(f"   ⚠️ (fusion) Fichier manquant : {csv_file.name}")
+            print(f"    (fusion) Fichier manquant : {csv_file.name}")
             continue
 
-        print(f"   📂 (fusion {label}) lecture par chunks...")
+        print(f"    (fusion {label}) lecture par chunks...")
 
         all_chunks = []
         usecols = [
@@ -379,7 +374,7 @@ def plot_gridded_2deg(df, out_path, season, depth_str, period_str):
     plt.tight_layout()
     plt.savefig(out_path, dpi=300, bbox_inches="tight")
     plt.close()
-    print(f"      ✓ {out_path.name}")
+    print(f"       {out_path.name}")
 
 
 def plot_gridded_2deg_on_axis(ax, csv_dir, season, depth_min, depth_max,
@@ -438,7 +433,7 @@ def create_decadal_panels(csv_dir, out_dir, season):
     d2_min, d2_max, d2_str = DEPTH_RANGES[1]
 
     # ---------------- Panel 1 : 1900-1929 (3×2) ----------------
-    print("\n📊 Panel 1: 1900-1929")
+    print("\n Panel 1: 1900-1929")
     panel1_periods = DECADES[:3]
 
     fig1, axes1 = plt.subplots(
@@ -501,10 +496,10 @@ def create_decadal_panels(csv_dir, out_dir, season):
     p1 = out_dir / f"NEMOvsNEMO_panel_gridded_2deg_{season}_1900-1929_3x2.png"
     fig1.savefig(p1, dpi=300)
     plt.close(fig1)
-    print(f"✅ {p1.name}")
+    print(f" {p1.name}")
 
     # ---------------- Panel 2 : 1930-1969 (4×2) ----------------
-    print("\n📊 Panel 2: 1930-1969")
+    print("\n Panel 2: 1930-1969")
     panel2_periods = DECADES[3:7]
 
     fig2, axes2 = plt.subplots(
@@ -570,7 +565,7 @@ def create_decadal_panels(csv_dir, out_dir, season):
     print(f"✅ {p2.name}")
 
     # ---------------- Panel 3 : fusion 1900-1929 vs 1930-1969 (2×2) ----------------
-    print("\n📊 Panel 3: 1900-1929 / 1930-1969 (fusion)")
+    print("\n Panel 3: 1900-1929 / 1930-1969 (fusion)")
 
     early_decades = DECADES[:3]
     late_decades  = DECADES[3:7]
@@ -671,7 +666,7 @@ def create_decadal_panels(csv_dir, out_dir, season):
     p3 = out_dir / f"NEMOvsNEMO_panel_gridded_2deg_{season}_1900-1969_2x2.png"
     fig3.savefig(p3, dpi=300)
     plt.close(fig3)
-    print(f"✅ {p3.name}")
+    print(f" {p3.name}")
 
     gc.collect()
 
@@ -687,10 +682,10 @@ def create_yamazaki_positions_gridded_map(csv_path, out_dir, season, chunksize=1
     """
     csv_file = Path(csv_path)
     if not csv_file.exists():
-        print(f"   ⚠️ Fichier introuvable : {csv_file}")
+        print(f"    Fichier introuvable : {csv_file}")
         return
 
-    print(f"   📂 Chargement {csv_file.name}...")
+    print(f"    Chargement {csv_file.name}...")
 
     season_months = SEASON_MONTHS[season]
     chunks = []
@@ -720,7 +715,7 @@ def create_yamazaki_positions_gridded_map(csv_path, out_dir, season, chunksize=1
             chunks.append(chunk)
 
     if not chunks:
-        print("   ⚠️ Aucune donnée")
+        print("    Aucune donnée")
         return
 
     df_all = pd.concat(chunks, ignore_index=True)
@@ -842,7 +837,7 @@ def create_yamazaki_positions_gridded_map(csv_path, out_dir, season, chunksize=1
     out_path = out_dir / f"NEMOvsNEMO_yamazaki_positions_gridded_2deg_{season}_panel_2x2.png"
     fig.savefig(out_path, dpi=300)
     plt.close(fig)
-    print(f"   ✅ {out_path.name}")
+    print(f"    {out_path.name}")
     gc.collect()
 
 
@@ -864,7 +859,7 @@ def main():
     out_dir = Path(args.out_dir).expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    print("\n📊 CARTES INDIVIDUELLES\n")
+    print("\n CARTES INDIVIDUELLES\n")
     for y_start, y_end, period_str in DECADES:
         df = load_decade(csv_dir, y_start, y_end, args.season)
         if df.empty:
@@ -883,12 +878,12 @@ def main():
     create_decadal_panels(csv_dir, out_dir, args.season)
 
     if args.yamazaki_positions_csv:
-        print("\n📊 CARTE GRIDDED AUX POSITIONS YAMAZAKI EXACTES\n")
+        print("\n CARTE GRIDDED AUX POSITIONS YAMAZAKI EXACTES\n")
         create_yamazaki_positions_gridded_map(
             args.yamazaki_positions_csv, out_dir, args.season
         )
 
-    print(f"\n{'=' * 80}\n✅ TERMINÉ\n{'=' * 80}")
+    print(f"\n{'=' * 80}\n TERMINÉ\n{'=' * 80}")
 
 
 if __name__ == "__main__":

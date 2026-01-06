@@ -1,19 +1,18 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 """
-yamazaki_and_histo_profiles.py (v10e -> v10e_RMS_STDDEV_only -> v10e_RMS_STDDEV_only_STATS_THEN_INTERP)
+commande d'execution : 
+python3 ~/Thesis/Yamazaki/Codes/yamazaki_and_histo_profiles_OK.py \
+  --csv-dir ~/Thesis/Yamazaki/Datas/Datas_OK \
+  --yamazaki-nc ~/Thesis/Yamazaki/Datas/Yamazaki_SO-Monthly-Climatology_v20240604.nc \
+  --out-dir ~/Thesis/Yamazaki/Outputs \
+  --season DJF \
+  --depth-min 10 --depth-max 200 \
+  --hist-y0 1900 --hist-y1 1970
 
-CHANGEMENT DEMANDÉ (ordre de priorité, aligné sur NEMO) :
 - Pour Yamazaki (temp et temp_dev) : on calcule d'abord les statistiques régionales/saisonnières
   sur les niveaux de profondeur NATIFS, puis on interpole les profils (mu, sigma_RMS) sur une grille 1 m.
 
-AUCUN CHANGEMENT sur :
-- paramètres graphiques / DA / spacing / tailles / marges / légendes
-- organisation des figures conservées (STDDEV uniquement)
 - définition RMS (sigma_RMS = sqrt(mean(temp_dev^2)) sur les dims non-depth)
 
-CHANGEMENT (cette itération) :
 - FIGURE 2 (scatter) :
   (1) histogrammes avec classes fixes de 0,5°C, alignées sur des multiples de 0,5 (comme NEMO)
   (2) droite y=x forcée coin-à-coin via xlim/ylim identiques sur l'axe scatter
@@ -29,7 +28,7 @@ import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
-from matplotlib.ticker import MaxNLocator  # <-- AJOUT (ticks identiques)
+from matplotlib.ticker import MaxNLocator  
 from matplotlib.ticker import MultipleLocator
 import xarray as xr
 
@@ -47,7 +46,7 @@ SEASON_MONTHS = {
 }
 
 # =============================================================================#
-# DA / LÉGENDES / SPACING (référence à conserver)
+# DA / LÉGENDES / SPACING 
 # =============================================================================#
 
 LEGEND_FONTSIZE_FIG1_NEW = 12
@@ -57,7 +56,7 @@ LEGEND_FONTSIZE_MERGED = 12
 LEGEND_Y_FIG1_NEW = 0.020
 BOTTOM_FIG1_NEW = 0.090
 
-# MERGED 7x2 (1900–1969) : correction de l’espace trop grand
+# MERGED 7x2 (1900–1969) 
 LEGEND_Y_MERGED = 0.028
 BOTTOM_MERGED   = 0.075
 
@@ -211,7 +210,7 @@ def load_frames(csv_dir, season, depth_min, depth_max, y0, y1):
     if df_all.empty:
         raise FileNotFoundError(f"Aucun CSV trouvé : {pattern}")
 
-    print(f"📂 {len(df_all):,} lignes chargées")
+    print(f" {len(df_all):,} lignes chargées")
 
     num_cols = ['hist_month', 'hist_depth_m', 'hist_year',
                 'hist_temperature', 'yamazaki_T', 'hist_lat', 'hist_lon']
@@ -236,8 +235,8 @@ def load_frames(csv_dir, season, depth_min, depth_max, y0, y1):
 
     df_scatter = df[df['hist_depth_m'] >= max(10, depth_min)]
 
-    print(f"✓ {len(df_cmp):,} observations (depth ≤ {depth_max}m)")
-    print(f"✓ {len(df_scatter):,} observations (scatter, sans plafond depth)")
+    print(f" {len(df_cmp):,} observations (depth ≤ {depth_max}m)")
+    print(f" {len(df_scatter):,} observations (scatter, sans plafond depth)")
 
     return df_cmp, df_scatter
 
@@ -442,7 +441,7 @@ def yamazaki_profile_latband_global(daT, daSTD, season, lat_min_deg, lat_max_deg
 
 
 # =============================================================================#
-# FIGURE 1 NEW : PAR MER (4x2) — STDDEV ONLY
+# FIGURE 1 : PAR MER (4x2) — STDDEV ONLY
 # =============================================================================#
 
 def _plot_yamazaki_new_on_ax_sea(ax, dec0, dec1, sea_name, df_comp,
@@ -509,7 +508,7 @@ def plot_1_yamazaki_new_panels(df_comp, daT, daSTD,
     fig, axes = plt.subplots(
         nrows=len(order), ncols=len(periods),
         figsize=(12, 12),
-        sharex=True,   # <-- MODIF CRITIQUE (au lieu de sharex='col')
+        sharex=True,   
         sharey=True
     )
 
@@ -550,8 +549,7 @@ def plot_1_yamazaki_new_panels(df_comp, daT, daSTD,
         ax.tick_params(labelbottom=True, labelleft=True)
 
     # -------------------------------------------------------------------------
-    # MODIF: mêmes xlim + mêmes ticks sur les deux colonnes,
-    # en prenant 1930–1969 (colonne 1) comme référence.
+    # mêmes xlim + mêmes ticks sur les deux colonnes en prenant 1930–1969 (colonne 1) comme référence.
     # -------------------------------------------------------------------------
     ref_col = 1  # 0 -> 1900-1929, 1 -> 1930-1969
     xmin_raw, xmax_raw = _compute_xlim_from_content(xvals_by_col[ref_col], pad_abs=0.25, pad_frac=0.05)
@@ -736,11 +734,11 @@ def plot_latbands_merged_panel_1900_1969(df_comp, daT, daSTD, out_dir, prefix, s
     out_path = out_dir / f"{prefix}_1NEW_yamazaki_latbands_1900-1969{sea_tag}.png"
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
-    print(f"✅ Latbands 1900-1969 MERGED (STDDEV RMS{'' if sea_name is None else ', sea=' + sea_name}): {out_path.name}")
+    print(f" Latbands 1900-1969 MERGED (STDDEV RMS{'' if sea_name is None else ', sea=' + sea_name}): {out_path.name}")
 
 
 # =============================================================================#
-# FIGURE 2 : Scatter no_reg (histogrammes alignés sur NEMO : bins 0,5°C)
+# FIGURE 2 : Scatter (histogrammes alignés sur NEMO : bins 0,5°C)
 # =============================================================================#
 
 def plot_2_no_reg(df_scatter, out_path, title_str):
@@ -771,7 +769,7 @@ def plot_2_no_reg(df_scatter, out_path, title_str):
     lim_high = float(max(_x.max(), _y.max()) + 0.5)
 
     # -------------------------------------------------------------------------
-    # Catégories profondeur (inchangé)
+    # Catégories profondeur
     # -------------------------------------------------------------------------
     bins = [10, 100, 200.0001]
     labels = ['10-100m', '100-200m']
@@ -871,37 +869,37 @@ def main():
     prefix = f"plot_{args.season}_{int(args.depth_min)}-{int(args.depth_max)}m"
 
     # Fig.1 NEW par mer : STDDEV uniquement
-    print("\n📊 Fig.1 NEW mers (STDDEV RMS)...")
+    print("\n Fig.1 mers (STDDEV RMS)...")
     plot_1_yamazaki_new_panels(df_cmp, daT, daSTD, out_dir, prefix, args.season,
                                args.depth_min, args.depth_max)
 
     # Latbands MERGED 1900-1969 : global STDDEV uniquement
-    print("\n📊 Latbands merged 1900-1969 (STDDEV RMS)...")
+    print("\n Latbands merged 1900-1969 (STDDEV RMS)...")
     plot_latbands_merged_panel_1900_1969(df_cmp, daT, daSTD, out_dir, prefix, args.season,
                                          args.depth_min, args.depth_max, sea_name=None)
 
     # Latbands MERGED 1900-1969 : Bellingshausen-Amundsen + Weddell (STDDEV RMS uniquement)
     for sea in ("Bellingshausen-Amundsen", "Weddell"):
-        print(f"\n📊 Latbands merged mer={sea} 1900-1969 (STDDEV RMS)...")
+        print(f"\n Latbands merged mer={sea} 1900-1969 (STDDEV RMS)...")
         plot_latbands_merged_panel_1900_1969(df_cmp, daT, daSTD, out_dir, prefix, args.season,
                                              args.depth_min, args.depth_max, sea_name=sea)
 
     # Scatter
-    print("\n📊 Plot 2 (scatter 1900-1929)...")
+    print("\n Plot 2 (scatter 1900-1929)...")
     _, df_scatter_1900 = load_frames(args.csv_dir, args.season,
                                     args.depth_min, args.depth_max, 1900, 1930)
     plot_2_no_reg(df_scatter_1900,
                   out_dir / f"{prefix}_1900-1929_2_no_reg.png",
                   f"Saison: {args.season} | Période: 1900-1929")
 
-    print("\n📊 Plot 2 (scatter 1930-1969)...")
+    print("\n Plot 2 (scatter 1930-1969)...")
     _, df_scatter_1930 = load_frames(args.csv_dir, args.season,
                                     args.depth_min, args.depth_max, 1930, 1970)
     plot_2_no_reg(df_scatter_1930,
                   out_dir / f"{prefix}_1930-1969_2_no_reg.png",
                   f"Saison: {args.season} | Période: 1930-1969")
 
-    print("\n✅ Génération terminée.")
+    print("\n Génération terminée.")
 
 
 if __name__ == "__main__":
